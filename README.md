@@ -1,4 +1,4 @@
-# bybit_shiprekt
+# bybit-shiprekt
 Inspired by Kraken Shiprekt Telegram group, but this is for Bybit.
 
 It reports the liquidation event as occurred (as late as 100 ms) then send to
