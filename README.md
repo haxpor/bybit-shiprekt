@@ -1,8 +1,11 @@
 # bybit-shiprekt
 Inspired by Kraken Shiprekt Telegram group, but this is for Bybit.
 
-You can use this code to spin your own relaying bot into your own telegram channel,
-or just subscribe to [https://t.me/bybit_shiprekt](https://t.me/bybit_shiprekt).
+It reports liquidation events as occurred on futures market on Bybit exchange into
+telegram channel group called ["Bybit Shiprekt"](https://t.me/bybit_shiprekt).
+
+You can use this code to spin your own, or just subscribe to such telegram channel group
+as mentioned.
 
 The reported event can be late no longer than 100 ms per batch of several events
 at a time.
