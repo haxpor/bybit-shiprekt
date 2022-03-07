@@ -1,8 +1,11 @@
 # bybit-shiprekt
 Inspired by Kraken Shiprekt Telegram group, but this is for Bybit.
 
-It reports the liquidation event as occurred (as late as 100 ms) then send to
-telegram channel group as you can subscribe at [https://t.me/bybit_shiprekt](https://t.me/bybit_shiprekt).
+You can use this code to spin your own relaying bot into your own telegram channel,
+or just subscribe to [https://t.me/bybit_shiprekt](https://t.me/bybit_shiprekt).
+
+The reported event can be late no longer than 100 ms per batch of several events
+at a time.
 
 # Liquidation note
 
