@@ -14,7 +14,6 @@
  *
  */
 use tungstenite::{connect, Message};
-use tungstenite::protocol::WebSocket;
 use tungstenite::stream::MaybeTlsStream;
 use url::Url;
 use rustelebot::*;
@@ -24,7 +23,6 @@ use separator::Separatable;
 
 use std::sync::mpsc::{sync_channel, SyncSender, TryRecvError};
 use std::time::Duration;
-use std::net::TcpStream;
 use regex::Regex;
 
 /// Internal used for between-thread communication through std::sync::mpsc
@@ -198,7 +196,7 @@ fn main() {
 
     // blocking version of connect (tungstenite::client::connect)
     // for unblocking call use client()
-    let (mut socket, response) = connect(Url::parse("wss://stream.bybit.com/realtime").unwrap()).expect("Can't connect");
+    let (mut socket, _response) = connect(Url::parse("wss://stream.bybit.com/realtime").unwrap()).expect("Can't connect");
 
     // check that underlying stream is TlsStream
     match socket.get_mut() {
@@ -239,7 +237,7 @@ fn main() {
                 Ok(_) => {
                     is_ok = true;
                 },
-                Err(e) => {
+                Err(_e) => {
                     eprintln!(" - (internal) Failed in sending ping signal message");
 
                     // It's not point to continue as we won't receive the PongMsg
@@ -270,7 +268,7 @@ fn main() {
                             _ => continue
                         },
                         // break to 'outer loop to restart everything
-                        Err(e) => break 'outer
+                        Err(_e) => break 'outer
                     }
                 }
             }
@@ -310,7 +308,7 @@ fn main() {
                 // better to at least we can distingquish between type of messages
                 // here.
                 match serde_json::from_str::<'_, VariantResponse>(&json_str) {
-                    Ok(VariantResponse::Subscribe(json_obj)) => (),
+                    Ok(VariantResponse::Subscribe(_json_obj)) => (),
                     Ok(VariantResponse::Liquidation(json_obj)) => {
                         let inner_json_obj = match json_obj.data {
                             GenericData::Liquidation(json_obj) => json_obj,
