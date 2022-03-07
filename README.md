@@ -7,6 +7,8 @@ or just subscribe to [https://t.me/bybit_shiprekt](https://t.me/bybit_shiprekt).
 The reported event can be late no longer than 100 ms per batch of several events
 at a time.
 
+![screenshot](screenshot.png)
+
 # Liquidation note
 
 By subscribing to liquidation websocket of Bybit, the value computed from
