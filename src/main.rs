@@ -189,7 +189,6 @@ fn get_ms_and_ns_pair(ms_timestamp: u64) -> (u64, u32) {
 
 fn main() {
     // create bot instance for telegram
-    // TODO: get bot instance's information from env variables
     let telegram_bot_instance = create_instance(
         &std::env::var("HX_BYBIT_SHIPREKT_TELEGRAM_BOT_TOKEN").expect("Required env variable HX_BYBIT_SHIPREKT_TELEGRAM_BOT_TOKEN to be defined"),
         &std::env::var("HX_BYBIT_SHIPREKT_TELEGRAM_CHANNEL_CHAT_ID").expect("Required env variable HX_BYBIT_SHIPREKT_TELEGRAM_CHANNEL_CHAT_ID to be defined"));
