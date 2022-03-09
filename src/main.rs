@@ -274,7 +274,7 @@ fn main() {
         }
     });
 
-    // main thread - main loop for 
+    // main thread - main loop for message processing
     loop {
         match receiver.try_recv() {
             Ok(signal) => match signal {
@@ -283,12 +283,21 @@ fn main() {
                     let ping_res = socket.write_message(Message::Ping(r#"{"op":"ping"}"#.into()));
                     match ping_res {
                         Ok(_res) => {
-                            // send back complete PongMsg
-                            // NOTE: It's no more worth to continue if we cannot send
-                            // back PongMsg to complete the process as
-                            // another thread might die already.
-                            // FIXME: implement better retry logic
-                            rev_sender.send(MsgType::PongMsg).expect("Error: cannot send back PongMsg");
+                            let mut is_ok = false;
+                            for _ in 0..3 {
+                                // send back complete PongMsg
+                                match rev_sender.send(MsgType::PongMsg) {
+                                    Ok(_) => {
+                                        is_ok = true;
+                                        break;
+                                    },
+                                    Err(e) => eprintln!("Error: cannot send back PongMsg; err={}", e)
+                                }
+                            }
+
+                            if !is_ok {
+                                panic!("internal rev_sender error after retrying for max 3 times");
+                            }
                         },
                         Err(e) => eprintln!("{}", e)
                     } 
