@@ -15,6 +15,7 @@
  */
 use tungstenite::{connect, Message};
 use tungstenite::stream::MaybeTlsStream;
+use tungstenite::error::Error as TungsError;
 use url::Url;
 use rustelebot::*;
 use chrono::{NaiveDateTime, DateTime, Utc};
@@ -369,7 +370,8 @@ fn main() {
                // no need to pay attention to close frame, it's already closed
                _ => println!("-- Websocket closed --"),
             },
-            //Err(e) => eprintln!("{:?}", e),
+            Err(TungsError::ConnectionClosed) => eprintln!("Error: connection closed"),
+            Err(TungsError::AlreadyClosed) => eprintln!("Error: already closed"),
             _ => ()
         }
     }
