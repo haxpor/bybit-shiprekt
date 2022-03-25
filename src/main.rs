@@ -19,234 +19,18 @@ use tungstenite::error::Error as TungsError;
 use url::Url;
 use rustelebot::*;
 use chrono::{NaiveDateTime, DateTime, Utc};
-use serde::{Deserialize, Deserializer};
 use separator::Separatable;
 
 use std::sync::mpsc::{sync_channel, SyncSender, TryRecvError};
 use std::time::Duration;
-use regex::Regex;
 
-/// Internal used for between-thread communication through std::sync::mpsc
-/// between signal thread, and main message loop in main thread.
-enum MsgType {
-	PingMsg,
-    PongMsg
-}
+mod types;
+mod deserialize;
+mod impls;
+mod utils;
+mod macros;
 
-#[derive(Debug, serde::Deserialize)]
-#[serde(untagged)]
-enum VariantResponse {
-    Subscribe(SubscribeResponse),
-    Liquidation(GenericResponse<BybitLiquidationData>),
-    Trade(GenericResponse<BybitTradeData>),
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct SubscribeResponse {
-    success: bool,
-    ret_msg: Option<String>,
-    conn_id: String,
-    request: SubscribeRequest,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct SubscribeRequest {
-    op: String,
-    args: Vec<String>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct GenericResponse<T> {
-    topic: String,
-    data: GenericData<T>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(untagged)]
-enum GenericData<T> {
-    Liquidation(T),
-    Trade(Vec<T>)
-}
-
-// we don't need to process anything of this field, thus we don't need to
-// convert into specific type e.g. number, but just String for displaying onto
-// console, otherwise we can do it with deserialize_with="fn".
-#[derive(Debug, serde::Deserialize)]
-struct BybitLiquidationData {
-    symbol: String,
-    side: String,
-    
-    #[serde(deserialize_with = "de_string_to_number")]
-    price: f64,
-
-    #[serde(deserialize_with = "de_string_to_number")]
-    qty: u32,   // maximum of trading qty depends on asset, but this would be suffice e.g. BTCUSD maxed at 1,000,000
-    time: u64
-}
-
-// same, just for representation
-// BEWARE: serde_json need "arbitrary_precision" feature in order to support i128, and u128
-// see https://github.com/serde-rs/json/pull/506/commits/f69e1ffe3fb07e2e221ea45ec4f4935a86ca1953
-#[derive(Debug, serde::Deserialize)]
-struct BybitTradeData {
-    timestamp: String,
-    trade_time_ms: u64,
-    symbol: String,
-    side: String,
-    size: u64,
-    price: f64,
-    tick_direction: String,
-    trade_id: String,
-    cross_seq: u64,
-}
-
-/// Deserializing function from `String` to numeric which can be any integer,
-/// or floating-point number.
-///
-/// # Also see
-/// Look at example at https://serde.rs/stream-array.html
-pub fn de_string_to_number<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: std::str::FromStr + serde::Deserialize<'de>,
-    <T as std::str::FromStr>::Err: std::fmt::Display // std::str::FromStr has `Err` type, see https://doc.rust-lang.org/std/str/trait.FromStr.html
-{
-    let buf = String::deserialize(deserializer)?;
-    // convert into serde's custom Error type
-    buf.parse::<T>().map_err(serde::de::Error::custom)
-}
-
-/// Get the base currency of the specified symbol.
-///
-/// # Arguments
-/// * `symbol` - fully qualified symbol to get base currency from
-///
-/// # Returns
-/// Return the reference to the string thus no allocation need as the source
-/// string is still around. This is reason not to return `String`.
-fn get_base_currency(symbol: &str) -> Result<&str, ()> {
-    // it can be USD, USDT, USDM..., USD<numberic>..., so USD is suffice for the
-    // search.
-    let matches: Vec<_> = symbol.match_indices("USD").collect();
-    if matches.len() == 0 {
-        // FIXME: add app's level error case
-        return Err(());
-    }
-
-    // don't get confused, this is to return the first half of split
-    Ok(symbol.split_at(matches[0].0).0)
-}
-
-/// Determine whether the specified symbol is linear perpetual.
-/// `Note`: On Bybit, there are 3 types of future contracts.
-///
-/// 1. Inverse Perpetual
-/// 2. USDT Perpetual (linear perpetual)
-/// 3. Inverse Futures
-///
-/// Only 2. is the linear perpetual, others are not.
-/// Currently only USDT would be applied for Bybit, and thus considered
-/// a linear perpetual (thus the name of USDT Perpetual).
-///
-/// # Arguments
-/// * `symbol` - fully qualified symbol to check whether it is a linear perpetual
-///
-/// # Returns
-/// True if it is a linear one, otherwise false.
-fn is_linear_perpetual(symbol: &str) -> bool {
-    symbol.match_indices("USDT").collect::<Vec<_>>().len() == 1    
-}
-
-/// Determine the specified symbol whether it is non-perpetual contract or not.
-/// 
-/// # Arguments
-/// * `symbol` - fully qualified symbol to check whether it is a non-perpetual contract
-///
-/// # Returns
-/// True if it is non-perpetual contract, otherwise false.
-fn is_non_perpetual_contract(symbol: &str) -> bool {
-    if is_linear_perpetual(symbol) {
-        return false;
-    }
-
-    // it could be BTCUSDM22, ETHUSD0325, etc
-    let regex = Regex::new(r"\S+USD\S\S+").unwrap();
-    regex.is_match(symbol)
-}
-
-/// Get the milliseconds and nanoseconds pair from the specified timestamp in
-/// milliseconds.
-///
-/// # Arguments
-/// * `ms_timestamp` - timestamp in milliseconds
-///
-/// # Returns
-/// Pair of seconds, and nanoseconds representing the input (ms) timestamp.
-fn get_ms_and_ns_pair(ms_timestamp: u64) -> (u64, u32) {
-    let ms: u64 = ms_timestamp / 1000;
-    let ns: u32 = (ms_timestamp % 1000) as u32;
-    (ms, ns)
-}
-
-/// Possible errors as might occur during the operation of the application.
-/// Each one contain optional `String` describing more detail for such error.
-enum OperationError {
-    ErrorInternalGeneric(Option<String>),
-    ErrorMissingRequiredEnvVar(Option<String>),
-    ErrorWssConnect(Option<String>),
-    ErrorWssTopicSubscription(Option<String>),
-    ErrorInternalSyncCommunication(Option<String>),
-}
-
-impl std::fmt::Display for OperationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        type OptErr = OperationError;
-
-        match self {
-            OptErr::ErrorInternalGeneric(opt_msg) => {
-                match opt_msg {
-                    Some(msg) => write!(f, "error internal generic; {}", msg),
-                    None => write!(f, "error internal generic")
-                }
-            },
-            OptErr::ErrorMissingRequiredEnvVar(opt_msg) => {
-                match opt_msg {
-                    Some(msg) => write!(f, "error missing required environment variable; {}", msg),
-                    None => write!(f, "error missing required environment variable")
-                }
-            },
-            OptErr::ErrorWssConnect(opt_msg) => {
-                match opt_msg {
-                    Some(msg) => write!(f, "error connecting to WSS; {}", msg),
-                    None => write!(f, "error connecting to WSS;")
-                }
-            },
-            OptErr::ErrorWssTopicSubscription(opt_msg) => {
-                match opt_msg {
-                    Some(msg) => write!(f, "error subscribing to a topic of websocket; {}", msg),
-                    None => write!(f, "error subscribing to a topic of websocket")
-                }
-            },
-            OptErr::ErrorInternalSyncCommunication(opt_msg) => {
-                match opt_msg {
-                    Some(msg) => write!(f, "error in internal syncing-communication mechanism; {}", msg),
-                    None => write!(f, "error in internal syncing-communication mechanism")
-                }
-            }
-        }
-    }
-}
-
-/// Convenient macro to accept `OperationError` with optional error message
-/// formed through variadic argument formatting to be printed alongside the
-/// default error message from such former type.
-macro_rules! errprint_exit1 {
-    ($err:expr, $($args:expr),*) => {{
-        let str_formed = std::fmt::format(format_args!($($args),*));
-        eprintln!("{}", $err(Some(str_formed)));
-        std::process::exit(1);
-    }}
-}
+use types::*;
 
 /// Connect to the target WSS url
 ///
@@ -316,7 +100,7 @@ fn main() {
                 Err(_e) => {
                     eprintln!(" - (internal) Failed in sending ping signal message");
 
-                    // It's not point to continue as we won't receive the PongMsg
+                    // There's no point to continue as we won't receive the PongMsg
                     // back as we didn't successfully send the PingMsg.
                     // Restart the whole process
                     continue;
@@ -408,11 +192,11 @@ fn main() {
                             }
                         };
 
-                        let base_currency = get_base_currency(&inner_json_obj.symbol).unwrap_or("UNKNOWN");
-                        let is_linear = is_linear_perpetual(&inner_json_obj.symbol);
+                        let base_currency = utils::get_base_currency(&inner_json_obj.symbol).unwrap_or("UNKNOWN");
+                        let is_linear = utils::is_linear_perpetual(&inner_json_obj.symbol);
                         let side = if inner_json_obj.side == "Buy" { "Long" } else { "Short" };
 
-                        let (ms, ns) = get_ms_and_ns_pair(inner_json_obj.time);
+                        let (ms, ns) = utils::get_ms_and_ns_pair(inner_json_obj.time);
                         // FIXME: dang, NaiveDateTime::from_timestamp requires i64, this means
                         // timestamp supports for 132 years further until 2102 since epoch 1970
                         let datetime: DateTime<Utc> = DateTime::from_utc(NaiveDateTime::from_timestamp(ms as i64, ns), Utc);
@@ -427,7 +211,7 @@ fn main() {
                             base_or_quote_currency=base_or_quote_currency_str,
                             bankruptcy_value=bankruptcy_worth_str,
                             symbol=inner_json_obj.symbol,
-                            perpetual_or_not=if is_non_perpetual_contract(&inner_json_obj.symbol) { "Futures" } else { "Perpetual futures" },
+                            perpetual_or_not=if utils::is_non_perpetual_contract(&inner_json_obj.symbol) { "Futures" } else { "Perpetual futures" },
                             price=price_str,
                             datetime_str=datetime.to_string());
 
@@ -443,7 +227,6 @@ fn main() {
                             Err(e) => eprintln!("{}", e.msg)
                         }
                     },
-                    Ok(VariantResponse::Trade(json_obj)) => println!("{:#?}", json_obj),
                     Err(e) => eprintln!("-- error parsing JSON response: {} --", e),
                 }
             },
@@ -454,7 +237,7 @@ fn main() {
             Err(TungsError::ConnectionClosed) => eprintln!("Error: connection closed"),
             Err(TungsError::AlreadyClosed) => eprintln!("Error: already closed"),
             Err(TungsError::Io(_)) => (),       // don't do anything because Io error means we don't have any incoming data to process
-            Err(TungsError::Tls(e)) => eprintln!("Error:: Tls error"),
+            Err(TungsError::Tls(e)) => eprintln!("Error:: Tls error; err={}", e),
             Err(TungsError::Capacity(e)) => {
                 type CError = tungstenite::error::CapacityError;
                 match e {
