@@ -309,10 +309,15 @@ fn main() {
             _ => ()
         }
 
+        // it's not necessary to cover all error cases here, but for now it would
+        // help to debug in case something weird happen when we actually run
+        // it as a long-running process.
         match socket.read_message() {
             // we don't distinguish between the type of message, just print it out
             Ok(Message::Ping(_)) => {},
             Ok(Message::Pong(_)) => {},
+            Ok(Message::Binary(bins)) => println!("Received Binbary message, content={}", std::str::from_utf8(&bins).unwrap_or("unknown")),
+            Ok(Message::Frame(frame)) => println!("Received Frame message, content={:?}", frame),
             Ok(Message::Text(json_str)) => {
                 // better to at least we can distingquish between type of messages
                 // here.
@@ -372,7 +377,37 @@ fn main() {
             },
             Err(TungsError::ConnectionClosed) => eprintln!("Error: connection closed"),
             Err(TungsError::AlreadyClosed) => eprintln!("Error: already closed"),
-            _ => ()
+            Err(TungsError::Io(_)) => (),
+            Err(TungsError::Tls(e)) => eprintln!("Error:: Tls error"),
+            Err(TungsError::Capacity(e)) => {
+                type CError = tungstenite::error::CapacityError;
+                match e {
+                    CError::TooManyHeaders => eprintln!("Error: CapacityError, too many headers"),
+                    CError::MessageTooLong{ size, max_size } => eprintln!("Error: CapacityError, message too long with size={}, max_size={}", size, max_size),
+                }
+            },
+            Err(TungsError::Protocol(e)) => eprintln!("Error: Protocol, err={}", e),
+            Err(TungsError::SendQueueFull(e)) => {
+                type PMsg = tungstenite::protocol::Message;
+
+                match e {
+                    PMsg::Text(text) => eprintln!("Error: SendQueueFull for Text message, content={}", text),
+                    PMsg::Binary(bins) => eprintln!("Error: SendQueueFull for Binary message, content={}", std::str::from_utf8(&bins).unwrap_or("unknown")),
+                    PMsg::Ping(bins) => eprintln!("Error: SendQueueFull for Ping message, content={}", std::str::from_utf8(&bins).unwrap_or("unknown")),
+                    PMsg::Pong(bins) => eprintln!("Error: SendQueueFull for Pong message, content={}", std::str::from_utf8(&bins).unwrap_or("unknown")),
+                    PMsg::Close(close_frame_optional) => {
+                        match close_frame_optional {
+                            Some(close_frame) => eprintln!("Error: SendQueueFull for Close message, content={:?}", close_frame),
+                            None => eprintln!("Error: SendQueueFull for Close message, no close-frame content")
+                        }
+                    },
+                    PMsg::Frame(frame) => eprintln!("Error: SendQueueFull for Frame messasge, content={:?}", frame)
+                }
+            },
+            Err(TungsError::Utf8) => eprintln!("Error: Utf8 coding error"),
+            Err(TungsError::Url(e)) => eprintln!("Error: Invalid Url; err={:?}", e),
+            Err(TungsError::Http(e)) => eprintln!("Error: Http error; err={:?}", e),
+            Err(TungsError::HttpFormat(e)) => eprintln!("Error: Http format error; err{:?}", e),
         }
     }
 }
