@@ -13,10 +13,9 @@
  * as much as possible (for now).
  *
  */
-use tungstenite::{connect, Message};
-use tungstenite::stream::MaybeTlsStream;
+use tungstenite::Message;
 use tungstenite::error::Error as TungsError;
-use url::Url;
+use tungstenite::stream::MaybeTlsStream;
 use rustelebot::*;
 use chrono::{NaiveDateTime, DateTime, Utc};
 use separator::Separatable;
@@ -24,11 +23,11 @@ use separator::Separatable;
 use std::sync::mpsc::{sync_channel, SyncSender, TryRecvError};
 use std::time::Duration;
 
+#[macro_use] mod macros;
 mod types;
 mod deserialize;
 mod impls;
 mod utils;
-mod macros;
 
 use types::*;
 
@@ -50,9 +49,9 @@ fn main() {
 
     // blocking version of connect (tungstenite::client::connect)
     // for unblocking call use client()
-    let (mut socket, _response) = match connect(Url::parse("wss://stream.bybit.com/realtime").unwrap()) {
+    let (mut socket, _response) = match utils::connect_to_wss("wss://stream.bybit.com/realtime") {
         Ok(res) => res,
-        Err(e) => errprint_exit1!(OperationError::ErrorWssConnect, "cannot connect to WSS; err={}", e),
+        Err(e) => errprint_exit1!(e),
     };
 
     // check that underlying stream is TlsStream
@@ -186,10 +185,6 @@ fn main() {
                     Ok(VariantResponse::Liquidation(json_obj)) => {
                         let inner_json_obj = match json_obj.data {
                             GenericData::Liquidation(json_obj) => json_obj,
-                            _ => {
-                                eprintln!("Found wrong type of JSON object to parsed for Liquidation");
-                                continue;
-                            }
                         };
 
                         let base_currency = utils::get_base_currency(&inner_json_obj.symbol).unwrap_or("UNKNOWN");
