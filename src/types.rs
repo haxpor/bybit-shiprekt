@@ -1,24 +1,20 @@
 use crate::deserialize::de_string_to_number;
-use serde::Deserialize;
-
-/// Internal used for between-thread communication through std::sync::mpsc
-/// between signal thread, and main message loop in main thread.
-pub enum MsgType {
-	PingMsg,
-    PongMsg
-}
 
 /// Variant of type of response we expect to use in this application.
 #[derive(Debug, serde::Deserialize)]
 #[serde(untagged)]
 pub enum VariantResponse {
-    Subscribe(SubscribeResponse),
-    Liquidation(GenericResponse<BybitLiquidationData>),
+    /// Cover all auxilary type of response in which to differentiate the type
+    /// of response message, we need to check specific field inside structure
+    Response(RequestResponse),
+
+    /// Liquidation
+    Liquidation(GenericTopic<BybitLiquidationData>),
 }
 
-/// Subscription response
+/// Request's response
 #[derive(Debug, serde::Deserialize)]
-pub struct SubscribeResponse {
+pub struct RequestResponse {
     /// Whether or not subscription is success
     pub success: bool,
 
@@ -29,21 +25,24 @@ pub struct SubscribeResponse {
     pub conn_id: String,
 
     /// Subscribe request object
-    pub request: SubscribeRequest,
+    pub request: ResponseRequestField,
 }
 
-/// Subscribe request
+/// Reponse's request field
 #[derive(Debug, serde::Deserialize)]
-pub struct SubscribeRequest {
+pub struct ResponseRequestField {
     /// Operation
+    /// Only this field which can be used to differentiate between type of
+    /// response.
     pub op: String,
 
     /// Arguments
-    pub args: Vec<String>,
+    pub args: Option<Vec<String>>,
 }
 
+/// Generic topic as response with varying data for various operation
 #[derive(Debug, serde::Deserialize)]
-pub struct GenericResponse<T> {
+pub struct GenericTopic<T> {
     pub topic: String,
     pub data: GenericData<T>,
 }

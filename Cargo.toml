@@ -14,3 +14,6 @@ tungstenite = { version = "0.17.0", features = ["native-tls"] }
 chrono = "0.4.19"
 separator = "0.4.1"
 regex = "1.5.4"
+tokio-tungstenite = { version = "0.17.1", features = ["native-tls", "stream"] }
+tokio = { version = "1.17.0", features = ["full"] }
+futures-util = "0.3.21"
