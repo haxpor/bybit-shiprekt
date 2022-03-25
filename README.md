@@ -7,9 +7,6 @@ telegram channel group called ["Bybit Shiprekt"](https://t.me/bybit_shiprekt).
 You can use this code to spin your own, or just subscribe to such telegram channel group
 as mentioned.
 
-The reported event can be late no longer than 100 ms per batch of several events
-at a time.
-
 ![screenshot](screenshot.png)
 
 # Liquidation note
