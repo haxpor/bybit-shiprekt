@@ -38,6 +38,41 @@ of the position.
     * `HX_BYBIT_SHIPREKT_TELEGRAM_CHANNEL_CHAT_ID` - telegram channel's chat id to relay the liquidation messages to
 * Build and run this program in the background.
 
+# Legacy note
+
+You can ignore this, it is kept just for historical purpose.
+
+The legacy note extracted from old version of source code after migrated away
+from polling mechanism to async way through `tokio-tungstenite`.
+
+```
+/**
+* Please note that I've spent much of the time trying to make mio's Poll works
+* with tungstenite with "native-tls" feature to work together. Unfortunately,
+* up until now, I didn't find an answer yet.
+*
+* See my question on Rust forum if you can help answering it:
+* https://users.rust-lang.org/t/tls-websocket-how-to-make-tungstenite-works-with-mio-for-poll-and-secure-websocket-wss-via-native-tls-feature-of-tungstenite-crate/72533?u=haxpor
+*
+* There are also choice whether we will go with async, or sync way.
+* Clearly I want to go with blocking approach, non-async, as simple as possible
+* first for this program. Although you can go with tokio-tungstenite for async
+* way but it's too overkill for me at this point. I would like it to be lightweight
+* as much as possible (for now).
+*
+*/
+```
+
+Before the project migrated to just use `tokio-tungstenite` I've tried to go
+minimally and attempted to make `tungstenite` works with `mio`'s `Poll` but
+due to the complexity of setting up stream, and its compatibility, the attempt
+was not success. So I have to cut out option of using `mio` in order to make it
+work in non-async way. With that we have option to set timeout of underlying
+stream, or make it non-blocking. Either way could work, but still it means it
+operates in polling way.
+
+Anyway for now, the project is in async way.
+
 # Disclaimer
 
 Use this program at your own risk. I take no responsibility towards damage or loss from using it

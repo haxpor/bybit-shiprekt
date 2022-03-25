@@ -1,18 +1,3 @@
-/**
- * Please note that I've spent much of the time trying to make mio's Poll works
- * with tungstenite with "native-tls" feature to work together. Unfortunately,
- * up until now, I didn't find an answer yet.
- * 
- * See my question on Rust forum if you can help answering it: 
- * https://users.rust-lang.org/t/tls-websocket-how-to-make-tungstenite-works-with-mio-for-poll-and-secure-websocket-wss-via-native-tls-feature-of-tungstenite-crate/72533?u=haxpor 
- *
- * There are also choice whether we will go with async, or sync way.
- * Clearly I want to go with blocking approach, non-async, as simple as possible
- * first for this program. Although you can go with tokio-tungstenite for async
- * way but it's too overkill for me at this point. I would like it to be lightweight
- * as much as possible (for now).
- *
- */
 use tungstenite::Message;
 use tungstenite::error::Error as TungsError;
 use futures_util::stream::StreamExt;
