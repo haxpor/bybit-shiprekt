@@ -453,7 +453,7 @@ fn main() {
             },
             Err(TungsError::ConnectionClosed) => eprintln!("Error: connection closed"),
             Err(TungsError::AlreadyClosed) => eprintln!("Error: already closed"),
-            Err(TungsError::Io(_)) => (),
+            Err(TungsError::Io(_)) => (),       // don't do anything because Io error means we don't have any incoming data to process
             Err(TungsError::Tls(e)) => eprintln!("Error:: Tls error"),
             Err(TungsError::Capacity(e)) => {
                 type CError = tungstenite::error::CapacityError;
