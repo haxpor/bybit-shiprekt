@@ -212,11 +212,13 @@ fn main() {
     println!("Connected to ByBit realtime websocket");
 
     let subscribe_res = socket.write_message(Message::Text(r#"{"op": "subscribe", "args": ["liquidation"]}"#.into()));
-    if subscribe_res.is_err() {
-        panic!("Error: {}", subscribe_res.unwrap_err());
+    match subscribe_res {
+        Ok(_) => println!("subscribed to liquidation topic"),
+        Err(e) => {
+            eprintln!("error subscribing to liquidation topic; err={}", e);
+            std::process::exit(1);
+        }
     }
-
-    println!("Subscribed to liquidation websocket");
 
     // create a async channel with 1 buffer for ping message
     // NOTE: we can have multiple of senders, but only one of receiver
