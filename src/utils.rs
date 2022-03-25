@@ -1,13 +1,10 @@
 use crate::types::OperationError;
 
-use tungstenite::connect;
-use tungstenite::protocol::WebSocket;
-use tungstenite::stream::MaybeTlsStream;
 use tungstenite::handshake::client::Response;
+use tokio_tungstenite::{connect_async, WebSocketStream, MaybeTlsStream};
+use tokio::net::TcpStream;
 use regex::Regex;
 use url::Url;
-
-use std::net::TcpStream;
 
 /// Get the base currency of the specified symbol.
 ///
@@ -85,14 +82,14 @@ pub fn get_ms_and_ns_pair(ms_timestamp: u64) -> (u64, u32) {
 ///
 /// # Arguments
 /// * `wss_url` - websocket url
-pub fn connect_to_wss(wss_url: &str) -> Result<(WebSocket<MaybeTlsStream<TcpStream>>, Response), OperationError> {
+pub async fn connect_async_to_wss(wss_url: &str) -> Result<(WebSocketStream<MaybeTlsStream<TcpStream>>, Response), OperationError> {
     let url = match Url::parse(wss_url) {
         Ok(res) => res,
         Err(e) => ret_err!(OperationError::ErrorInternalGeneric, "Url parsing error; err={}", e),
     };
 
-    match connect(url) {
-        Ok(tuple) => Ok(tuple),
+    match connect_async(url).await {
+        Ok((ws, response)) => Ok((ws, response)),
         Err(e) => ret_err!(OperationError::ErrorWssConnect, "cannot connect to WSS; err={}", e),
     }
 }
