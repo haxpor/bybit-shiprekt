@@ -231,7 +231,7 @@ fn main() {
     std::thread::spawn(move || {
         'outer: loop {
             // sleep for some period of time before sending signal through mpsc
-            let sleep_ping = std::time::Duration::from_secs(10);
+            let sleep_ping = std::time::Duration::from_secs(30);
             std::thread::sleep(sleep_ping);
 
             let mut is_ok = false;
