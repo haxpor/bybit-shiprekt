@@ -188,15 +188,88 @@ fn get_ms_and_ns_pair(ms_timestamp: u64) -> (u64, u32) {
     (ms, ns)
 }
 
+/// Possible errors as might occur during the operation of the application.
+/// Each one contain optional `String` describing more detail for such error.
+enum OperationError {
+    ErrorInternalGeneric(Option<String>),
+    ErrorMissingRequiredEnvVar(Option<String>),
+    ErrorWssConnect(Option<String>),
+    ErrorWssTopicSubscription(Option<String>),
+    ErrorInternalSyncCommunication(Option<String>),
+}
+
+impl std::fmt::Display for OperationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        type OptErr = OperationError;
+
+        match self {
+            OptErr::ErrorInternalGeneric(opt_msg) => {
+                match opt_msg {
+                    Some(msg) => write!(f, "error internal generic; {}", msg),
+                    None => write!(f, "error internal generic")
+                }
+            },
+            OptErr::ErrorMissingRequiredEnvVar(opt_msg) => {
+                match opt_msg {
+                    Some(msg) => write!(f, "error missing required environment variable; {}", msg),
+                    None => write!(f, "error missing required environment variable")
+                }
+            },
+            OptErr::ErrorWssConnect(opt_msg) => {
+                match opt_msg {
+                    Some(msg) => write!(f, "error connecting to WSS; {}", msg),
+                    None => write!(f, "error connecting to WSS;")
+                }
+            },
+            OptErr::ErrorWssTopicSubscription(opt_msg) => {
+                match opt_msg {
+                    Some(msg) => write!(f, "error subscribing to a topic of websocket; {}", msg),
+                    None => write!(f, "error subscribing to a topic of websocket")
+                }
+            },
+            OptErr::ErrorInternalSyncCommunication(opt_msg) => {
+                match opt_msg {
+                    Some(msg) => write!(f, "error in internal syncing-communication mechanism; {}", msg),
+                    None => write!(f, "error in internal syncing-communication mechanism")
+                }
+            }
+        }
+    }
+}
+
+/// Convenient macro to accept `OperationError` with optional error message
+/// formed through variadic argument formatting to be printed alongside the
+/// default error message from such former type.
+macro_rules! errprint_exit1 {
+    ($err:expr, $($args:expr),*) => {{
+        let str_formed = std::fmt::format(format_args!($($args),*));
+        eprintln!("{}", $err(Some(str_formed)));
+        std::process::exit(1);
+    }}
+}
+
+/// Connect to the target WSS url
+///
+/// # Arguments
+/// * `wss_url` - wss url to connect to
 fn main() {
     // create bot instance for telegram
     let telegram_bot_instance = create_instance(
-        &std::env::var("HX_BYBIT_SHIPREKT_TELEGRAM_BOT_TOKEN").expect("Required env variable HX_BYBIT_SHIPREKT_TELEGRAM_BOT_TOKEN to be defined"),
-        &std::env::var("HX_BYBIT_SHIPREKT_TELEGRAM_CHANNEL_CHAT_ID").expect("Required env variable HX_BYBIT_SHIPREKT_TELEGRAM_CHANNEL_CHAT_ID to be defined"));
+        &match std::env::var("HX_BYBIT_SHIPREKT_TELEGRAM_BOT_TOKEN") {
+            Ok(res) => res,
+            Err(e) => errprint_exit1!(OperationError::ErrorMissingRequiredEnvVar, "HX_BYBIT_SHIPREKT_TELEGRAM_BOT_TOKEN not defined; err={}", e),
+        },
+        &match std::env::var("HX_BYBIT_SHIPREKT_TELEGRAM_CHANNEL_CHAT_ID") {
+            Ok(res) => res,
+            Err(e) => errprint_exit1!(OperationError::ErrorMissingRequiredEnvVar, "HX_BYBIT_SHIPREKT_TELEGRAM_CHANNEL_CHAT_ID not defined; err={}", e),
+        });
 
     // blocking version of connect (tungstenite::client::connect)
     // for unblocking call use client()
-    let (mut socket, _response) = connect(Url::parse("wss://stream.bybit.com/realtime").unwrap()).expect("Can't connect");
+    let (mut socket, _response) = match connect(Url::parse("wss://stream.bybit.com/realtime").unwrap()) {
+        Ok(res) => res,
+        Err(e) => errprint_exit1!(OperationError::ErrorWssConnect, "cannot connect to WSS; err={}", e),
+    };
 
     // check that underlying stream is TlsStream
     match socket.get_mut() {
@@ -204,20 +277,21 @@ fn main() {
             // instead of set to non-blocking, we set timeout so we will have
             // an effect of a slightly waiting time used in the main message loop for free
             //t.get_mut().set_nonblocking(true);
-            t.get_mut().set_read_timeout(Some(Duration::from_millis(100))).expect("Error: cannot set read-timeout to underlying stream");
+            match t.get_mut().set_read_timeout(Some(Duration::from_millis(100))) {
+                Err(e) => errprint_exit1!(OperationError::ErrorInternalGeneric, "Error: cannot set read-timeout to underlying stream; err={}", e),
+                _ => (),
+            }
         },
         _ => panic!("Error: it is not TlsStream")
     }
 
     println!("Connected to ByBit realtime websocket");
 
+    // TODO: provide filtering options through cli e.g. BTCUSD, XRPUSD, etc
     let subscribe_res = socket.write_message(Message::Text(r#"{"op": "subscribe", "args": ["liquidation"]}"#.into()));
     match subscribe_res {
         Ok(_) => println!("subscribed to liquidation topic"),
-        Err(e) => {
-            eprintln!("error subscribing to liquidation topic; err={}", e);
-            std::process::exit(1);
-        }
+        Err(e) => errprint_exit1!(OperationError::ErrorWssTopicSubscription, "error subscribing to liquidation topic; err={}", e),
     }
 
     // create a async channel with 1 buffer for ping message
