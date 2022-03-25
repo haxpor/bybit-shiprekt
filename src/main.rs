@@ -31,10 +31,6 @@ mod utils;
 
 use types::*;
 
-/// Connect to the target WSS url
-///
-/// # Arguments
-/// * `wss_url` - wss url to connect to
 fn main() {
     // create bot instance for telegram
     let telegram_bot_instance = create_instance(
